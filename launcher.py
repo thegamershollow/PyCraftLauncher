@@ -18,6 +18,15 @@ logging.basicConfig(
     ]
 )
 
+# Ensure that the Python version is 3.12 or higher
+required_python_version = (3, 12)
+current_python_version = sys.version_info
+
+if current_python_version < required_python_version:
+    logging.error(f"Python {required_python_version[0]}.{required_python_version[1]} or higher is required. "
+                  f"Current version: {current_python_version[0]}.{current_python_version[1]}")
+    sys.exit(1)
+
 # Ensure that the script is running on macOS
 if platform.system() != "Darwin":
     logging.error("Error, you are not running macOS. Please use a Mac to run this.")
