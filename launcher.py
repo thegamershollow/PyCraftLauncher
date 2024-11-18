@@ -34,24 +34,43 @@ try:
     JavaPath = os.path.join(JavaHome, "bin", "java")
     logging.info(f"Java 6 found at {JavaPath}")
 except subprocess.CalledProcessError as e:
-    logging.error("Java 6 is not installed or could not be found.")
+    logging.error("Java 6 is not installed or could not be found.\nIf you would like to download Java 6, go here: https://updates.cdn-apple.com/2019/cert/041-88384-20191011-3d8da658-dca4-4a5b-b67c-26e686876403/JavaForOSX.dmg")
     sys.exit(1)
 
 # JVM arguments and user settings
-JVMArgs = "-Xmx2048M -Xms2048M"
-MCUser = "MCUser"
+JVMArgs = "-Xmx768M -Xms768M"
+MCUser = "Steve"
 
 # Game launch information
-logging.info("Minecraft 1.2.5 for Legacy Mac OS, version 1.0.0")
+logging.info("Minecraft 1.2.5 for Legacy Mac OS, version 1.0.4")
 logging.info("Adapted from the PowerPC version of Minecraft 1.2.5")
-logging.info("And minecraft fast sp by thicc industries")
+logging.info("And Minecraft Fast SP by Thicc Industries")
 logging.info("Made by TheGamersHollow in 2024")
 logging.info("Launching the game...\n\n\n")
 
-# Construct the launch command
-command = f"{JavaPath} -cp {os.path.join(MCBinPath, 'minecraft.jar')}:{os.path.join(MCBinPath, 'lwjgl.jar')}:{os.path.join(MCBinPath, 'lwjgl_util.jar')}:{os.path.join(MCBinPath, 'jinput.jar')} -Djava.library.path={os.path.join(MCBinPath, 'natives')} {JVMArgs} net.minecraft.client.Minecraft --username {MCUser}"
+# Construct the classpath for the game
+classpaths = [
+    os.path.join(MCBinPath, "minecraft.jar"),
+    os.path.join(MCBinPath, "lwjgl.jar"),
+    os.path.join(MCBinPath, "lwjgl_util.jar"),
+    os.path.join(MCBinPath, "jinput.jar")
+]
 
-# Log the command (optional, you can comment this if sensitive info is a concern)
+# Join classpaths with the correct separator for macOS (colon)
+classpath = ":".join(classpaths)
+
+# Specify the Java library path
+library_path = os.path.join(MCBinPath, "natives")
+
+# Construct the full command with user-specific options
+command = (
+    f'"{JavaPath}" -cp "{classpath}" '
+    f'-Djava.library.path="{library_path}" '
+    f'{JVMArgs} '
+    f'net.minecraft.client.Minecraft --username "{MCUser}"'
+)
+
+# Log the command (optional)
 logging.debug(f"Launching Minecraft with command: {command}")
 
 # Execute the command
