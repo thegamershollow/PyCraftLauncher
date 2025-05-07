@@ -1,7 +1,0 @@
-Original "Texture Update 1.3.4" made by JAPPA @ Mojang
-
-https://minecraft.fandom.com/wiki/Texture_Update
-
-Heavily modified for Minecraft PowerPC Edition by z970 @ Macintosh Garden
-
-http://macintoshgarden.org/games/minecraft-152
