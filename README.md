@@ -1,2 +1,3 @@
 # PyCraftLauncher
-A python based minecraft 1.2.5 launcher for MacOS X
+
+An offline only minecraft launcher for Java coded in python.
