@@ -81,7 +81,7 @@ def download_client_and_libraries(version_data):
 def download_assets(version_data):
     asset_index_info = version_data.get("assetIndex")
     if not asset_index_info:
-        print(f"❌ No asset index found for version {MINECRAFT_VERSION}.")
+        print(f"[❌] No asset index found for version {MINECRAFT_VERSION}.")
         return
 
     asset_index_id = asset_index_info.get("id", MINECRAFT_VERSION)
@@ -100,7 +100,7 @@ def download_assets(version_data):
         json.dump(asset_index, f, indent=2)
 
     # Download all asset objects
-    print(f"⬇️ Downloading assets for Minecraft {MINECRAFT_VERSION}...")
+    print(f"[⬇️] Downloading assets for Minecraft {MINECRAFT_VERSION}...")
     for asset_name, asset_info in asset_index.get("objects", {}).items():
         hash_val = asset_info["hash"]
         subdir = hash_val[:2]
@@ -111,7 +111,7 @@ def download_assets(version_data):
             print(f"Downloaded: {asset_name}")
         else:
             print(f"Exists: {asset_name}")
-    print("✅ All assets downloaded.")
+    print("[✅] All assets downloaded.")
 
 # Extract native libraries
 def extract_natives(version_data):
@@ -163,7 +163,7 @@ def launch_minecraft(version_data):
         "--uuid", "0",
     ]
 
-    print(f"🚀 Launching Minecraft {version_id} in Offline Mode on {platform.system()}...")
+    print(f"[🚀] Launching Minecraft {version_id} in Offline Mode on {platform.system()}...")
     subprocess.run(args)
 
 # Main execution
