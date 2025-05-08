@@ -10,7 +10,7 @@ MINECRAFT_VERSION = input("Please enter the Minecraft Version you wish to play: 
 USERNAME = input("Enter a Username: ")
 BASE_DIR = Path("minecraft")
 LIBRARIES_DIR = BASE_DIR / "libraries"
-ASSETS_DIR = BASE_DIR / "assets"
+ASSETS_DIR = BASE_DIR / MINECRAFT_VERSION
 NATIVES_DIR = BASE_DIR / "natives"
 JAVA_PATH = "java"  # Change if Java isn't in your PATH
 
