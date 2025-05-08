@@ -7,6 +7,7 @@ import platform
 import psutil
 from pathlib import Path
 from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
 
 SETTINGS_FILE = "settings.json"
 BASE_DIR = Path("minecraft")
@@ -92,10 +93,12 @@ def download_client_and_libraries(version_data):
     version_dir = VERSIONS_DIR / version_id
     version_dir.mkdir(parents=True, exist_ok=True)
 
+    downloads = []
+
     # Client
     client_path = version_dir / f"{version_id}.jar"
     if not client_path.exists():
-        download_file(version_data["downloads"]["client"]["url"], client_path)
+        downloads.append((version_data["downloads"]["client"]["url"], client_path))
 
     # Version JSON
     json_path = version_dir / f"{version_id}.json"
@@ -104,19 +107,22 @@ def download_client_and_libraries(version_data):
 
     # Libraries
     for lib in version_data["libraries"]:
-        downloads = lib.get("downloads", {})
-        if "artifact" in downloads:
-            artifact = downloads["artifact"]
+        downloads_data = lib.get("downloads", {})
+        if "artifact" in downloads_data:
+            artifact = downloads_data["artifact"]
             path = LIBRARIES_DIR / artifact["path"]
             if not path.exists():
-                download_file(artifact["url"], path)
+                downloads.append((artifact["url"], path))
 
-        classifiers = downloads.get("classifiers", {})
+        classifiers = downloads_data.get("classifiers", {})
         native = get_native_for_os(classifiers)
         if native:
             native_path = LIBRARIES_DIR / native["path"]
             if not native_path.exists():
-                download_file(native["url"], native_path)
+                downloads.append((native["url"], native_path))
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        executor.map(lambda args: download_file(*args), downloads)
 
 # Download assets
 def download_assets(version_data):
@@ -135,13 +141,17 @@ def download_assets(version_data):
     with open(index_path, "w") as f:
         json.dump(asset_index, f, indent=2)
 
+    downloads = []
     for name, info in asset_index["objects"].items():
         hash_val = info["hash"]
         subdir = hash_val[:2]
         url = f"https://resources.download.minecraft.net/{subdir}/{hash_val}"
         target = ASSETS_DIR / "objects" / subdir / hash_val
         if not target.exists():
-            download_file(url, target)
+            downloads.append((url, target))
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        executor.map(lambda args: download_file(*args), downloads)
 
 # Extract natives
 def extract_natives(version_data):
