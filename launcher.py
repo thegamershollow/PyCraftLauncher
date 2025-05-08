@@ -5,64 +5,74 @@ import subprocess
 import zipfile
 import platform
 from pathlib import Path
+from tqdm import tqdm
 
-MINECRAFT_VERSION = input("Please enter the Minecraft Version you wish to play: ")
-USERNAME = input("Enter a Username: ")
+JAVA_PATH = "java"
 BASE_DIR = Path("minecraft")
 LIBRARIES_DIR = BASE_DIR / "libraries"
-ASSETS_DIR = BASE_DIR / MINECRAFT_VERSION
+ASSETS_DIR = BASE_DIR / "assets"
 NATIVES_DIR = BASE_DIR / "natives"
-JAVA_PATH = "java"  # Change if Java isn't in your PATH
-
 GAME_DIR = BASE_DIR
 
-# Function for downloading files
+# Download file with progress bar
 def download_file(url, dest):
+    if os.path.exists(dest):
+        print(f"[✔️] Exists: {dest}")
+        return
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     response = requests.get(url, stream=True)
-    response.raise_for_status()
-    with open(dest, "wb") as f:
-        for chunk in response.iter_content(chunk_size=8192):
-            f.write(chunk)
+    total = int(response.headers.get('content-length', 0))
+    with open(dest, "wb") as file, tqdm(
+        desc=f"⬇️ {os.path.basename(dest)}",
+        total=total,
+        unit='B',
+        unit_scale=True,
+        unit_divisor=1024,
+    ) as bar:
+        for data in response.iter_content(chunk_size=1024):
+            file.write(data)
+            bar.update(len(data))
 
-# Download version manifest and full metadata
-def download_version_manifest():
-    url = "https://launchermeta.mojang.com/mc/game/version_manifest_v2.json"
-    data = requests.get(url).json()
-    for version in data["versions"]:
-        if version["id"] == MINECRAFT_VERSION:
-            return requests.get(version["url"]).json()
-    raise Exception("Version not found.")
+# Let user pick Minecraft version
+def select_minecraft_version():
+    print("Fetching Minecraft versions...")
+    manifest = requests.get("https://launchermeta.mojang.com/mc/game/version_manifest_v2.json").json()
+    versions = manifest["versions"][:20]  # Limit to latest 20 for brevity
+    for idx, v in enumerate(versions):
+        print(f"{idx + 1}. {v['id']} ({v['type']})")
+    while True:
+        try:
+            choice = int(input("Select Minecraft version [1-20]: "))
+            if 1 <= choice <= len(versions):
+                selected = versions[choice - 1]
+                version_json = requests.get(selected["url"]).json()
+                return version_json
+        except (ValueError, IndexError):
+            pass
+        print("Invalid selection. Try again.")
 
-# Get native classifier for current OS
+# Get native library for current OS
 def get_native_for_os(classifiers):
     os_name = platform.system().lower()
-    if os_name == "windows":
-        return classifiers.get("natives-windows")
-    elif os_name == "linux":
-        return classifiers.get("natives-linux")
-    elif os_name == "darwin":
-        return classifiers.get("natives-osx")
-    else:
-        raise Exception(f"Unsupported OS: {os_name}")
+    return classifiers.get({
+        "windows": "natives-windows",
+        "linux": "natives-linux",
+        "darwin": "natives-osx"
+    }.get(os_name, ""), None)
 
-# Download JAR and libraries
 def download_client_and_libraries(version_data):
-    version_id = version_data.get("id", MINECRAFT_VERSION)
+    version_id = version_data["id"]
     version_dir = BASE_DIR / "versions" / version_id
     version_dir.mkdir(parents=True, exist_ok=True)
 
-    # Download client
     client_url = version_data["downloads"]["client"]["url"]
     client_path = version_dir / f"{version_id}.jar"
     download_file(client_url, client_path)
 
-    # Save version JSON
     json_path = version_dir / f"{version_id}.json"
     with open(json_path, "w") as f:
         json.dump(version_data, f, indent=2)
 
-    # Download libraries
     for lib in version_data["libraries"]:
         if "downloads" in lib:
             if "artifact" in lib["downloads"]:
@@ -70,50 +80,32 @@ def download_client_and_libraries(version_data):
                 lib_path = LIBRARIES_DIR / Path(artifact["path"])
                 download_file(artifact["url"], lib_path)
 
-            # Native libraries
-            classifiers = lib["downloads"].get("classifiers", {})
-            native = get_native_for_os(classifiers)
+            native = get_native_for_os(lib["downloads"].get("classifiers", {}))
             if native:
                 native_path = LIBRARIES_DIR / Path(native["path"])
                 download_file(native["url"], native_path)
 
-# Download assets and save index JSON using correct ID
 def download_assets(version_data):
-    asset_index_info = version_data.get("assetIndex")
-    if not asset_index_info:
-        print(f"[❌] No asset index found for version {MINECRAFT_VERSION}.")
+    index_info = version_data.get("assetIndex")
+    if not index_info:
+        print(f"[❌] No asset index found for version {version_data['id']}.")
         return
 
-    asset_index_id = asset_index_info.get("id", MINECRAFT_VERSION)
-    asset_index_url = asset_index_info["url"]
-
-    index_path = ASSETS_DIR / "indexes" / f"{asset_index_id}.json"
-    (ASSETS_DIR / "indexes").mkdir(parents=True, exist_ok=True)
-    (ASSETS_DIR / "objects").mkdir(parents=True, exist_ok=True)
-
-    # Download asset index JSON
-    response = requests.get(asset_index_url)
-    response.raise_for_status()
-    asset_index = response.json()
-
+    index_path = ASSETS_DIR / "indexes" / f"{index_info['id']}.json"
+    os.makedirs(index_path.parent, exist_ok=True)
+    asset_index = requests.get(index_info["url"]).json()
     with open(index_path, "w", encoding="utf-8") as f:
         json.dump(asset_index, f, indent=2)
 
-    # Download all asset objects
-    print(f"[⬇️] Downloading assets for Minecraft {MINECRAFT_VERSION}...")
-    for asset_name, asset_info in asset_index.get("objects", {}).items():
-        hash_val = asset_info["hash"]
+    print(f"[⬇️] Downloading assets for Minecraft {version_data['id']}...")
+    for name, info in asset_index["objects"].items():
+        hash_val = info["hash"]
         subdir = hash_val[:2]
-        url = f"https://resources.download.minecraft.net/{subdir}/{hash_val}"
-        target_path = ASSETS_DIR / "objects" / subdir / hash_val
-        if not target_path.exists():
-            download_file(url, target_path)
-            print(f"Downloaded: {asset_name}")
-        else:
-            print(f"Exists: {asset_name}")
-    print("[✅] All assets downloaded.")
+        target = ASSETS_DIR / "objects" / subdir / hash_val
+        if not target.exists():
+            url = f"https://resources.download.minecraft.net/{subdir}/{hash_val}"
+            download_file(url, target)
 
-# Extract native libraries
 def extract_natives(version_data):
     NATIVES_DIR.mkdir(parents=True, exist_ok=True)
     for lib in version_data["libraries"]:
@@ -125,26 +117,22 @@ def extract_natives(version_data):
                 with zipfile.ZipFile(native_path, 'r') as zip_ref:
                     zip_ref.extractall(NATIVES_DIR)
             except zipfile.BadZipFile:
-                print(f"Warning: Bad ZIP file for {native_path}")
+                print(f"[⚠️] Bad ZIP file for {native_path}")
 
-# Build classpath for Java launch
 def build_classpath(version_data):
     libs = []
     for lib in version_data["libraries"]:
-        if "downloads" in lib and "artifact" in lib["downloads"]:
-            artifact = lib["downloads"]["artifact"]
-            lib_path = LIBRARIES_DIR / Path(artifact["path"])
+        if "artifact" in lib.get("downloads", {}):
+            lib_path = LIBRARIES_DIR / Path(lib["downloads"]["artifact"]["path"])
             libs.append(str(lib_path))
-    version_id = version_data.get("id", MINECRAFT_VERSION)
+    version_id = version_data["id"]
     client_jar = BASE_DIR / "versions" / version_id / f"{version_id}.jar"
     libs.append(str(client_jar))
     return os.pathsep.join(libs)
 
-# Launch the game
-def launch_minecraft(version_data):
-    version_id = version_data.get("id", MINECRAFT_VERSION)
-    asset_index_id = version_data.get("assetIndex", {}).get("id", version_id)
-
+def launch_minecraft(version_data, username):
+    version_id = version_data["id"]
+    asset_index_id = version_data["assetIndex"]["id"]
     classpath = build_classpath(version_data)
     main_class = version_data["mainClass"]
 
@@ -154,7 +142,7 @@ def launch_minecraft(version_data):
         f"-Djava.library.path={NATIVES_DIR}",
         "-cp", classpath,
         main_class,
-        "--username", USERNAME,
+        "--username", username,
         "--version", version_id,
         "--gameDir", str(GAME_DIR),
         "--assetsDir", str(ASSETS_DIR),
@@ -163,17 +151,17 @@ def launch_minecraft(version_data):
         "--uuid", "0",
     ]
 
-    print(f"[🚀] Launching Minecraft {version_id} in Offline Mode on {platform.system()}...")
+    print(f"[🚀] Launching Minecraft {version_id} in Offline Mode...")
     subprocess.run(args)
 
-# Main execution
 def main():
+    version_data = select_minecraft_version()
+    username = input("Enter a Username [default: Steve]: ").strip() or "Steve"
     BASE_DIR.mkdir(parents=True, exist_ok=True)
-    version_data = download_version_manifest()
     download_client_and_libraries(version_data)
     download_assets(version_data)
     extract_natives(version_data)
-    launch_minecraft(version_data)
+    launch_minecraft(version_data, username)
 
 if __name__ == "__main__":
     main()
